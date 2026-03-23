@@ -9,7 +9,7 @@ Integers decode as `bigint` by default (i64/u64 safe handling).
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 24+
 - Rust stable
 - `wasm-pack` for WASM builds
 
@@ -59,7 +59,7 @@ import {
 await init({ prefer: "napi" });
 
 const value: GoweValue = {
-  id: "1001n",
+  id: 1001n,
   name: "alice",
   active: true,
 };
