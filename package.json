@@ -33,7 +33,7 @@
     "build": "pnpm build:napi && pnpm build:wasm && pnpm build:ts",
     "build:ts": "tsc -p tsconfig.json",
     "build:napi": "cargo build --manifest-path Cargo.toml -p gowe-napi --release && node ./scripts/copy-napi.mjs",
-    "build:wasm": "wasm-pack build crates/gowe-wasm --target bundler --out-dir ../../wasm/pkg --out-name gowe_wasm",
+    "build:wasm": "wasm-pack build crates/gowe-wasm --target bundler --out-dir ../../wasm/pkg --out-name gowe_wasm --no-opt",
     "format": "prettier --write \"{README.md,package.json,tsconfig.json,.github/workflows/*.yml,scripts/**/*.mjs,src/**/*.ts,tests/**/*.mjs}\"",
     "format:check": "prettier --check \"{README.md,package.json,tsconfig.json,.github/workflows/*.yml,scripts/**/*.mjs,src/**/*.ts,tests/**/*.mjs}\"",
     "typecheck": "tsc --noEmit",

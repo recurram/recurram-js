@@ -9,7 +9,7 @@ fn into_js_error(error: impl ToString) -> JsValue {
 }
 
 #[wasm_bindgen(js_name = encodeTransportJson)]
-pub fn encode_transport_json_wasm(value_json: &str) -> Result<Vec<u8>, JsValue> {
+pub fn encode_transport_json_wasm(value_json: String) -> Result<Vec<u8>, JsValue> {
     encode_transport_json(value_json).map_err(into_js_error)
 }
 
@@ -20,14 +20,14 @@ pub fn decode_to_transport_json_wasm(bytes: &[u8]) -> Result<String, JsValue> {
 
 #[wasm_bindgen(js_name = encodeWithSchemaTransportJson)]
 pub fn encode_with_schema_transport_json_wasm(
-    schema_json: &str,
-    value_json: &str,
+    schema_json: String,
+    value_json: String,
 ) -> Result<Vec<u8>, JsValue> {
     encode_with_schema_transport_json(schema_json, value_json).map_err(into_js_error)
 }
 
 #[wasm_bindgen(js_name = encodeBatchTransportJson)]
-pub fn encode_batch_transport_json_wasm(values_json: &str) -> Result<Vec<u8>, JsValue> {
+pub fn encode_batch_transport_json_wasm(values_json: String) -> Result<Vec<u8>, JsValue> {
     encode_batch_transport_json(values_json).map_err(into_js_error)
 }
 
@@ -45,7 +45,7 @@ impl SessionEncoder {
     }
 
     #[wasm_bindgen(js_name = encodeTransportJson)]
-    pub fn encode_transport_json(&mut self, value_json: &str) -> Result<Vec<u8>, JsValue> {
+    pub fn encode_transport_json(&mut self, value_json: String) -> Result<Vec<u8>, JsValue> {
         self.inner
             .encode_transport_json(value_json)
             .map_err(into_js_error)
@@ -54,8 +54,8 @@ impl SessionEncoder {
     #[wasm_bindgen(js_name = encodeWithSchemaTransportJson)]
     pub fn encode_with_schema_transport_json(
         &mut self,
-        schema_json: &str,
-        value_json: &str,
+        schema_json: String,
+        value_json: String,
     ) -> Result<Vec<u8>, JsValue> {
         self.inner
             .encode_with_schema_transport_json(schema_json, value_json)
@@ -63,14 +63,14 @@ impl SessionEncoder {
     }
 
     #[wasm_bindgen(js_name = encodeBatchTransportJson)]
-    pub fn encode_batch_transport_json(&mut self, values_json: &str) -> Result<Vec<u8>, JsValue> {
+    pub fn encode_batch_transport_json(&mut self, values_json: String) -> Result<Vec<u8>, JsValue> {
         self.inner
             .encode_batch_transport_json(values_json)
             .map_err(into_js_error)
     }
 
     #[wasm_bindgen(js_name = encodePatchTransportJson)]
-    pub fn encode_patch_transport_json(&mut self, value_json: &str) -> Result<Vec<u8>, JsValue> {
+    pub fn encode_patch_transport_json(&mut self, value_json: String) -> Result<Vec<u8>, JsValue> {
         self.inner
             .encode_patch_transport_json(value_json)
             .map_err(into_js_error)
@@ -79,7 +79,7 @@ impl SessionEncoder {
     #[wasm_bindgen(js_name = encodeMicroBatchTransportJson)]
     pub fn encode_micro_batch_transport_json(
         &mut self,
-        values_json: &str,
+        values_json: String,
     ) -> Result<Vec<u8>, JsValue> {
         self.inner
             .encode_micro_batch_transport_json(values_json)
