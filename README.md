@@ -56,7 +56,7 @@ import {
   toTransportJson,
   encodeTransportJson,
   type GoweValue,
-} from "gowe";
+} from "@gowe/core";
 
 await init({ prefer: "napi" });
 
@@ -96,7 +96,7 @@ For hot paths where you can prepare payloads ahead of time, use transport JSON A
 ## Usage (Browser)
 
 ```ts
-import { init, encode, decode } from "gowe";
+import { init, encode, decode } from "@gowe/core";
 
 await init({ prefer: "wasm" });
 

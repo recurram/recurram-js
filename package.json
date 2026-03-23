@@ -1,5 +1,5 @@
 {
-  "name": "gowe",
+  "name": "@gowe/core",
   "version": "0.1.0",
   "description": "Node.js and TypeScript implementation of a fast, compact binary wire format for modern data transport.",
   "type": "module",
