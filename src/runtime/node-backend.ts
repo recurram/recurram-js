@@ -67,7 +67,5 @@ function wrapSessionEncoder(
 }
 
 function asUint8Array(value: Uint8Array): Uint8Array {
-  return value instanceof Uint8Array
-    ? Uint8Array.from(value)
-    : Uint8Array.from(value);
+  return value;
 }

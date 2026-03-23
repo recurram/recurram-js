@@ -53,6 +53,8 @@ import {
   encode,
   decode,
   createSessionEncoder,
+  toTransportJson,
+  encodeTransportJson,
   type GoweValue,
 } from "gowe";
 
@@ -70,7 +72,26 @@ const roundtrip = decode(bytes);
 const session = createSessionEncoder();
 const first = session.encode(value);
 const patch = session.encodePatch({ ...value, name: "alicia" });
+
+const prepared = toTransportJson(value);
+const fastest = encodeTransportJson(prepared);
 ```
+
+## High-throughput transport JSON APIs
+
+For hot paths where you can prepare payloads ahead of time, use transport JSON APIs to reduce JS-side conversion overhead:
+
+- `toTransportJson(value)` / `fromTransportJson(json)`
+- `toTransportJsonBatch(values)`
+- `encodeTransportJson(valueJson)` / `decodeToTransportJson(bytes)`
+- `encodeBatchTransportJson(valuesJson)`
+
+`SessionEncoder` also supports raw methods:
+
+- `encodeTransportJson(valueJson)`
+- `encodeBatchTransportJson(valuesJson)`
+- `encodePatchTransportJson(valueJson)`
+- `encodeMicroBatchTransportJson(valuesJson)`
 
 ## Usage (Browser)
 

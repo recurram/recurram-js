@@ -52,34 +52,42 @@ export function deserializeValue(json: string): GoweValue {
 }
 
 export function serializeValues(values: GoweValue[]): string {
-  return JSON.stringify(values.map((value) => toTransportValue(value)));
+  const out = new Array<TransportValue>(values.length);
+  for (let index = 0; index < values.length; index += 1) {
+    out[index] = toTransportValue(values[index]);
+  }
+  return JSON.stringify(out);
 }
 
 export function serializeSchema(schema: Schema): string {
+  const fields = new Array<TransportSchemaField>(schema.fields.length);
+  for (let index = 0; index < schema.fields.length; index += 1) {
+    const field = schema.fields[index];
+    const out: TransportSchemaField = {
+      number: toTransportInteger(field.number, "field.number", true),
+      name: field.name,
+      logicalType: field.logicalType,
+      required: field.required,
+    };
+    if (field.defaultValue !== undefined) {
+      out.defaultValue = toTransportValue(field.defaultValue);
+    }
+    if (field.min !== undefined) {
+      out.min = toTransportInteger(field.min, "field.min", false);
+    }
+    if (field.max !== undefined) {
+      out.max = toTransportInteger(field.max, "field.max", false);
+    }
+    if (field.enumValues !== undefined) {
+      out.enumValues = field.enumValues;
+    }
+    fields[index] = out;
+  }
+
   const payload: TransportSchema = {
     schemaId: toTransportInteger(schema.schemaId, "schemaId", true),
     name: schema.name,
-    fields: schema.fields.map((field) => {
-      const out: TransportSchemaField = {
-        number: toTransportInteger(field.number, "field.number", true),
-        name: field.name,
-        logicalType: field.logicalType,
-        required: field.required,
-      };
-      if (field.defaultValue !== undefined) {
-        out.defaultValue = toTransportValue(field.defaultValue);
-      }
-      if (field.min !== undefined) {
-        out.min = toTransportInteger(field.min, "field.min", false);
-      }
-      if (field.max !== undefined) {
-        out.max = toTransportInteger(field.max, "field.max", false);
-      }
-      if (field.enumValues !== undefined) {
-        out.enumValues = field.enumValues;
-      }
-      return out;
-    }),
+    fields,
   };
   return JSON.stringify(payload);
 }
@@ -152,15 +160,28 @@ function toTransportValue(value: GoweValue): TransportValue {
     return { t: "binary", v: toBase64(value) };
   }
   if (Array.isArray(value)) {
-    return { t: "array", v: value.map((entry) => toTransportValue(entry)) };
+    const length = value.length;
+    const out = new Array<TransportValue>(length);
+    for (let index = 0; index < length; index += 1) {
+      out[index] = toTransportValue(value[index]);
+    }
+    return { t: "array", v: out };
   }
-  if (!isPlainObject(value)) {
+
+  if (typeof value !== "object" || value === null) {
     throw new Error("unsupported value type");
   }
-  const entries = Object.entries(value).map(
-    ([key, inner]) =>
-      [key, toTransportValue(inner as GoweValue)] as [string, TransportValue],
-  );
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error("unsupported value type");
+  }
+
+  const entries: Array<[string, TransportValue]> = [];
+  const objectValue = value as Record<string, GoweValue>;
+  for (const key in objectValue) {
+    entries.push([key, toTransportValue(objectValue[key])]);
+  }
   return { t: "map", v: entries };
 }
 
@@ -180,12 +201,20 @@ function fromTransportValue(value: TransportValue): GoweValue {
       return value.v;
     case "binary":
       return fromBase64(value.v);
-    case "array":
-      return value.v.map((entry) => fromTransportValue(entry));
+    case "array": {
+      const length = value.v.length;
+      const out = new Array<GoweValue>(length);
+      for (let index = 0; index < length; index += 1) {
+        out[index] = fromTransportValue(value.v[index]);
+      }
+      return out;
+    }
     case "map": {
       const out: Record<string, GoweValue> = {};
-      for (const [key, inner] of value.v) {
-        out[key] = fromTransportValue(inner);
+      const length = value.v.length;
+      for (let index = 0; index < length; index += 1) {
+        const entry = value.v[index];
+        out[entry[0]] = fromTransportValue(entry[1]);
       }
       return out;
     }
@@ -220,13 +249,13 @@ function toTransportInteger(
   return value.toString();
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return Object.prototype.toString.call(value) === "[object Object]";
-}
-
 function toBase64(bytes: Uint8Array): string {
   if (typeof Buffer !== "undefined") {
-    return Buffer.from(bytes).toString("base64");
+    return Buffer.from(
+      bytes.buffer,
+      bytes.byteOffset,
+      bytes.byteLength,
+    ).toString("base64");
   }
   if (typeof btoa === "function") {
     let binary = "";
@@ -240,7 +269,7 @@ function toBase64(bytes: Uint8Array): string {
 
 function fromBase64(encoded: string): Uint8Array {
   if (typeof Buffer !== "undefined") {
-    return Uint8Array.from(Buffer.from(encoded, "base64"));
+    return Buffer.from(encoded, "base64");
   }
   if (typeof atob === "function") {
     const binary = atob(encoded);
