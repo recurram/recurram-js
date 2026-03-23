@@ -1,6 +1,6 @@
 import type { GoweValue, Schema, SessionOptions } from "./types.js";
 
-type TransportValue =
+export type TransportValue =
   | { t: "null" }
   | { t: "bool"; v: boolean }
   | { t: "i64"; v: string }
@@ -118,7 +118,7 @@ export function serializeSessionOptions(options: SessionOptions = {}): string {
   return JSON.stringify(payload);
 }
 
-function toTransportValue(value: GoweValue): TransportValue {
+export function toTransportValue(value: GoweValue): TransportValue {
   if (value === null) {
     return { t: "null" };
   }
@@ -185,7 +185,15 @@ function toTransportValue(value: GoweValue): TransportValue {
   return { t: "map", v: entries };
 }
 
-function fromTransportValue(value: TransportValue): GoweValue {
+export function toTransportValues(values: GoweValue[]): TransportValue[] {
+  const out = new Array<TransportValue>(values.length);
+  for (let index = 0; index < values.length; index += 1) {
+    out[index] = toTransportValue(values[index]);
+  }
+  return out;
+}
+
+export function fromTransportValue(value: TransportValue): GoweValue {
   switch (value.t) {
     case "null":
       return null;
@@ -280,4 +288,142 @@ function fromBase64(encoded: string): Uint8Array {
     return bytes;
   }
   throw new Error("base64 decoding is not available in this runtime");
+}
+
+// ── Compact transport format ────────────────────────────────────────────────
+//
+// Tags: 0=null, 1=bool, 2=i64, 3=u64, 4=f64, 5=string, 6=binary, 7=array, 8=map
+// Format: [tag] for null, [tag, value] for everything else.
+// Map value is a flat array: [key1, val1, key2, val2, ...]
+// This produces ~50% shorter JSON than the object-based transport format.
+
+type CompactValue = readonly [number] | readonly [number, unknown];
+
+export function serializeCompact(value: GoweValue): string {
+  return JSON.stringify(toCompactValue(value));
+}
+
+export function deserializeCompact(json: string): GoweValue {
+  const parsed = JSON.parse(json) as CompactValue;
+  return fromCompactValue(parsed);
+}
+
+export function serializeCompactBatch(values: GoweValue[]): string {
+  const out = new Array(values.length);
+  for (let index = 0; index < values.length; index += 1) {
+    out[index] = toCompactValue(values[index]);
+  }
+  return JSON.stringify(out);
+}
+
+function toCompactValue(value: GoweValue): CompactValue {
+  if (value === null) {
+    return [0];
+  }
+  if (typeof value === "boolean") {
+    return [1, value];
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new Error("number values must be finite");
+    }
+    if (Number.isInteger(value)) {
+      if (!Number.isSafeInteger(value)) {
+        throw new Error(
+          "unsafe integer number detected; use bigint for 64-bit integers",
+        );
+      }
+      return value >= 0 ? [3, String(value)] : [2, String(value)];
+    }
+    return [4, value];
+  }
+  if (typeof value === "bigint") {
+    if (value >= 0n) {
+      if (value > MAX_U64) {
+        throw new Error("u64 overflow");
+      }
+      return [3, value.toString()];
+    }
+    if (value < MIN_I64 || value > MAX_I64) {
+      throw new Error("i64 overflow");
+    }
+    return [2, value.toString()];
+  }
+  if (typeof value === "string") {
+    return [5, value];
+  }
+  if (value instanceof Uint8Array) {
+    return [6, toBase64(value)];
+  }
+  if (Array.isArray(value)) {
+    const length = value.length;
+    const out = new Array(length);
+    for (let index = 0; index < length; index += 1) {
+      out[index] = toCompactValue(value[index]);
+    }
+    return [7, out];
+  }
+
+  if (typeof value !== "object" || value === null) {
+    throw new Error("unsupported value type");
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error("unsupported value type");
+  }
+
+  // Map: flat array [key1, val1, key2, val2, ...]
+  const objectValue = value as Record<string, GoweValue>;
+  const keys = Object.keys(objectValue);
+  const flat = new Array(keys.length * 2);
+  for (let index = 0; index < keys.length; index += 1) {
+    flat[index * 2] = keys[index];
+    flat[index * 2 + 1] = toCompactValue(objectValue[keys[index]]);
+  }
+  return [8, flat];
+}
+
+function fromCompactValue(cv: CompactValue): GoweValue {
+  const tag = cv[0] as number;
+  switch (tag) {
+    case 0: // null
+      return null;
+    case 1: // bool
+      return (cv as readonly [number, boolean])[1];
+    case 2: // i64
+      return BigInt((cv as readonly [number, string])[1]);
+    case 3: // u64
+      return BigInt((cv as readonly [number, string])[1]);
+    case 4: // f64
+      return (cv as readonly [number, number])[1];
+    case 5: // string
+      return (cv as readonly [number, string])[1];
+    case 6: // binary
+      return fromBase64((cv as readonly [number, string])[1]);
+    case 7: {
+      // array
+      const items = (cv as readonly [number, CompactValue[]])[1];
+      const length = items.length;
+      const out = new Array<GoweValue>(length);
+      for (let index = 0; index < length; index += 1) {
+        out[index] = fromCompactValue(items[index]);
+      }
+      return out;
+    }
+    case 8: {
+      // map: flat array [key1, val1, key2, val2, ...]
+      const flat = (cv as readonly [number, unknown[]])[1];
+      const out: Record<string, GoweValue> = {};
+      const length = flat.length;
+      for (let index = 0; index < length; index += 2) {
+        out[flat[index] as string] = fromCompactValue(
+          flat[index + 1] as CompactValue,
+        );
+      }
+      return out;
+    }
+    default:
+      throw new Error(`unknown compact tag: ${tag}`);
+  }
 }

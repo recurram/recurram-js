@@ -6,7 +6,21 @@ use gowe::{
     create_session_encoder, decode, encode, encode_batch, encode_with_schema, GoweError, Schema,
     SessionEncoder, SessionOptions, UnknownReferencePolicy, Value,
 };
-use serde::{Deserialize, Serialize};
+use serde::de::{self, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::value::RawValue;
+
+// ── SIMD-JSON helpers ───────────────────────────────────────────────────────
+// simd_json::from_slice requires &mut [u8]. We accept owned Strings from N-API
+// and convert via into_bytes() — zero extra allocation.
+
+/// Parse JSON using simd-json (fast SIMD path). Falls back gracefully since
+/// simd_json implements serde's Deserializer trait.
+#[inline(always)]
+fn simd_from_mut_slice<'de, T: Deserialize<'de>>(bytes: &'de mut [u8]) -> Result<T> {
+    simd_json::from_slice(bytes)
+        .map_err(|e| BridgeError::new(format!("simd-json parse error: {e}")))
+}
 
 pub type Result<T> = std::result::Result<T, BridgeError>;
 
@@ -45,7 +59,7 @@ impl From<GoweError> for BridgeError {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "t", content = "v")]
-enum TransportValue {
+pub enum TransportValue {
     #[serde(rename = "null")]
     Null,
     #[serde(rename = "bool")]
@@ -142,8 +156,9 @@ struct TransportSessionOptions {
     unknown_reference_policy: Option<String>,
 }
 
-pub fn encode_transport_json(value_json: &str) -> Result<Vec<u8>> {
-    let transport: TransportValue = serde_json::from_str(value_json)?;
+pub fn encode_transport_json(mut value_json: String) -> Result<Vec<u8>> {
+    let bytes = unsafe { value_json.as_bytes_mut() };
+    let transport: TransportValue = simd_from_mut_slice(bytes)?;
     let value = transport_to_value(transport)?;
     encode(&value).map_err(Into::into)
 }
@@ -154,15 +169,31 @@ pub fn decode_to_transport_json(bytes: &[u8]) -> Result<String> {
     serde_json::to_string(&transport).map_err(Into::into)
 }
 
-pub fn encode_with_schema_transport_json(schema_json: &str, value_json: &str) -> Result<Vec<u8>> {
-    let schema = parse_schema_json(schema_json)?;
-    let transport: TransportValue = serde_json::from_str(value_json)?;
+pub fn decode_to_compact_json(bytes: &[u8]) -> Result<String> {
+    let value = decode(bytes)?;
+    let mut out = String::with_capacity(256);
+    value_to_compact_json_str(&value, &mut out);
+    Ok(out)
+}
+
+pub fn encode_with_schema_transport_json(
+    mut schema_json: String,
+    mut value_json: String,
+) -> Result<Vec<u8>> {
+    let schema = parse_schema_json(&mut schema_json)?;
+    let vbytes = unsafe { value_json.as_bytes_mut() };
+    let transport: TransportValue = simd_from_mut_slice(vbytes)?;
     let value = transport_to_value(transport)?;
     encode_with_schema(&schema, &value).map_err(Into::into)
 }
 
-pub fn encode_batch_transport_json(values_json: &str) -> Result<Vec<u8>> {
-    let values = parse_transport_values_json(values_json)?;
+pub fn encode_batch_transport_json(mut values_json: String) -> Result<Vec<u8>> {
+    let bytes = unsafe { values_json.as_bytes_mut() };
+    let transports: Vec<TransportValue> = simd_from_mut_slice(bytes)?;
+    let values: Vec<Value> = transports
+        .into_iter()
+        .map(transport_to_value)
+        .collect::<Result<Vec<_>>>()?;
     encode_batch(&values).map_err(Into::into)
 }
 
@@ -178,38 +209,54 @@ impl BridgeSessionEncoder {
         })
     }
 
-    pub fn encode_transport_json(&mut self, value_json: &str) -> Result<Vec<u8>> {
-        let transport: TransportValue = serde_json::from_str(value_json)?;
+    pub fn encode_transport_json(&mut self, mut value_json: String) -> Result<Vec<u8>> {
+        let bytes = unsafe { value_json.as_bytes_mut() };
+        let transport: TransportValue = simd_from_mut_slice(bytes)?;
         let value = transport_to_value(transport)?;
         self.inner.encode(&value).map_err(Into::into)
     }
 
     pub fn encode_with_schema_transport_json(
         &mut self,
-        schema_json: &str,
-        value_json: &str,
+        mut schema_json: String,
+        mut value_json: String,
     ) -> Result<Vec<u8>> {
-        let schema = parse_schema_json(schema_json)?;
-        let transport: TransportValue = serde_json::from_str(value_json)?;
+        let schema = parse_schema_json(&mut schema_json)?;
+        let vbytes = unsafe { value_json.as_bytes_mut() };
+        let transport: TransportValue = simd_from_mut_slice(vbytes)?;
         let value = transport_to_value(transport)?;
         self.inner
             .encode_with_schema(&schema, &value)
             .map_err(Into::into)
     }
 
-    pub fn encode_batch_transport_json(&mut self, values_json: &str) -> Result<Vec<u8>> {
-        let values = parse_transport_values_json(values_json)?;
+    pub fn encode_batch_transport_json(&mut self, mut values_json: String) -> Result<Vec<u8>> {
+        let bytes = unsafe { values_json.as_bytes_mut() };
+        let transports: Vec<TransportValue> = simd_from_mut_slice(bytes)?;
+        let values: Vec<Value> = transports
+            .into_iter()
+            .map(transport_to_value)
+            .collect::<Result<Vec<_>>>()?;
         self.inner.encode_batch(&values).map_err(Into::into)
     }
 
-    pub fn encode_patch_transport_json(&mut self, value_json: &str) -> Result<Vec<u8>> {
-        let transport: TransportValue = serde_json::from_str(value_json)?;
+    pub fn encode_patch_transport_json(&mut self, mut value_json: String) -> Result<Vec<u8>> {
+        let bytes = unsafe { value_json.as_bytes_mut() };
+        let transport: TransportValue = simd_from_mut_slice(bytes)?;
         let value = transport_to_value(transport)?;
         self.inner.encode_patch(&value).map_err(Into::into)
     }
 
-    pub fn encode_micro_batch_transport_json(&mut self, values_json: &str) -> Result<Vec<u8>> {
-        let values = parse_transport_values_json(values_json)?;
+    pub fn encode_micro_batch_transport_json(
+        &mut self,
+        mut values_json: String,
+    ) -> Result<Vec<u8>> {
+        let bytes = unsafe { values_json.as_bytes_mut() };
+        let transports: Vec<TransportValue> = simd_from_mut_slice(bytes)?;
+        let values: Vec<Value> = transports
+            .into_iter()
+            .map(transport_to_value)
+            .collect::<Result<Vec<_>>>()?;
         self.inner.encode_micro_batch(&values).map_err(Into::into)
     }
 
@@ -218,8 +265,9 @@ impl BridgeSessionEncoder {
     }
 }
 
-fn parse_schema_json(schema_json: &str) -> Result<Schema> {
-    let schema: TransportSchema = serde_json::from_str(schema_json)?;
+fn parse_schema_json(schema_json: &mut String) -> Result<Schema> {
+    let bytes = unsafe { schema_json.as_bytes_mut() };
+    let schema: TransportSchema = simd_from_mut_slice(bytes)?;
     transport_schema_to_schema(schema)
 }
 
@@ -227,13 +275,9 @@ fn parse_session_options_json(options_json: Option<&str>) -> Result<SessionOptio
     let Some(raw) = options_json else {
         return Ok(SessionOptions::default());
     };
+    // Session options parsing is cold path, use serde_json
     let options: TransportSessionOptions = serde_json::from_str(raw)?;
     transport_session_options_to_options(options)
-}
-
-fn parse_transport_values_json(values_json: &str) -> Result<Vec<Value>> {
-    let transports: Vec<TransportValue> = serde_json::from_str(values_json)?;
-    transports.into_iter().map(transport_to_value).collect()
 }
 
 fn transport_schema_to_schema(schema: TransportSchema) -> Result<Schema> {
@@ -295,6 +339,90 @@ fn parse_unknown_reference_policy(value: &str) -> Result<UnknownReferencePolicy>
     }
 }
 
+// ── Direct API (bypasses JSON string intermediate) ──────────────────────────
+
+pub fn encode_direct(transport: TransportValue) -> Result<Vec<u8>> {
+    let value = transport_to_value(transport)?;
+    encode(&value).map_err(Into::into)
+}
+
+pub fn encode_direct_from_json(jv: serde_json::Value) -> Result<Vec<u8>> {
+    let value = parse_value_from_json_value(jv)?;
+    encode(&value).map_err(Into::into)
+}
+
+pub fn decode_direct(bytes: &[u8]) -> Result<TransportValue> {
+    let value = decode(bytes)?;
+    Ok(value_to_transport(value))
+}
+
+pub fn encode_batch_direct(transports: Vec<TransportValue>) -> Result<Vec<u8>> {
+    let values: Vec<Value> = transports
+        .into_iter()
+        .map(transport_to_value)
+        .collect::<Result<Vec<_>>>()?;
+    encode_batch(&values).map_err(Into::into)
+}
+
+pub fn encode_batch_direct_from_json(jv: serde_json::Value) -> Result<Vec<u8>> {
+    let values = parse_values_from_json_value(jv)?;
+    encode_batch(&values).map_err(Into::into)
+}
+
+impl BridgeSessionEncoder {
+    pub fn encode_direct(&mut self, transport: TransportValue) -> Result<Vec<u8>> {
+        let value = transport_to_value(transport)?;
+        self.inner.encode(&value).map_err(Into::into)
+    }
+
+    pub fn encode_direct_from_json(&mut self, jv: serde_json::Value) -> Result<Vec<u8>> {
+        let value = parse_value_from_json_value(jv)?;
+        self.inner.encode(&value).map_err(Into::into)
+    }
+
+    pub fn encode_batch_direct(&mut self, transports: Vec<TransportValue>) -> Result<Vec<u8>> {
+        let values: Vec<Value> = transports
+            .into_iter()
+            .map(transport_to_value)
+            .collect::<Result<Vec<_>>>()?;
+        self.inner.encode_batch(&values).map_err(Into::into)
+    }
+
+    pub fn encode_batch_direct_from_json(&mut self, jv: serde_json::Value) -> Result<Vec<u8>> {
+        let values = parse_values_from_json_value(jv)?;
+        self.inner.encode_batch(&values).map_err(Into::into)
+    }
+
+    pub fn encode_patch_direct(&mut self, transport: TransportValue) -> Result<Vec<u8>> {
+        let value = transport_to_value(transport)?;
+        self.inner.encode_patch(&value).map_err(Into::into)
+    }
+
+    pub fn encode_patch_direct_from_json(&mut self, jv: serde_json::Value) -> Result<Vec<u8>> {
+        let value = parse_value_from_json_value(jv)?;
+        self.inner.encode_patch(&value).map_err(Into::into)
+    }
+
+    pub fn encode_micro_batch_direct(
+        &mut self,
+        transports: Vec<TransportValue>,
+    ) -> Result<Vec<u8>> {
+        let values: Vec<Value> = transports
+            .into_iter()
+            .map(transport_to_value)
+            .collect::<Result<Vec<_>>>()?;
+        self.inner.encode_micro_batch(&values).map_err(Into::into)
+    }
+
+    pub fn encode_micro_batch_direct_from_json(
+        &mut self,
+        jv: serde_json::Value,
+    ) -> Result<Vec<u8>> {
+        let values = parse_values_from_json_value(jv)?;
+        self.inner.encode_micro_batch(&values).map_err(Into::into)
+    }
+}
+
 fn transport_to_value(value: TransportValue) -> Result<Value> {
     match value {
         TransportValue::Null => Ok(Value::Null),
@@ -345,4 +473,428 @@ fn value_to_transport(value: Value) -> TransportValue {
                 .collect(),
         ),
     }
+}
+
+// ── Compact transport format ────────────────────────────────────────────────
+//
+// Tags: 0=null, 1=bool, 2=i64, 3=u64, 4=f64, 5=string, 6=binary, 7=array, 8=map
+// Format: [tag] for null, [tag, value] for everything else.
+// Map value is a flat array: [key1, val1, key2, val2, ...]
+//
+// Uses a custom serde Deserialize impl for single-pass JSON → Value conversion.
+
+/// Serialize a gowe::Value to compact JSON format, writing directly to a String.
+/// This avoids building any intermediate serde or transport objects.
+fn value_to_compact_json_str(value: &Value, out: &mut String) {
+    match value {
+        Value::Null => out.push_str("[0]"),
+        Value::Bool(true) => out.push_str("[1,true]"),
+        Value::Bool(false) => out.push_str("[1,false]"),
+        Value::I64(v) => {
+            out.push_str("[2,\"");
+            let mut buf = itoa::Buffer::new();
+            out.push_str(buf.format(*v));
+            out.push_str("\"]");
+        }
+        Value::U64(v) => {
+            out.push_str("[3,\"");
+            let mut buf = itoa::Buffer::new();
+            out.push_str(buf.format(*v));
+            out.push_str("\"]");
+        }
+        Value::F64(v) => {
+            out.push_str("[4,");
+            // Use ryu for fast f64 formatting
+            let mut buf = ryu::Buffer::new();
+            out.push_str(buf.format(*v));
+            out.push(']');
+        }
+        Value::String(s) => {
+            out.push_str("[5,");
+            // JSON-escape the string
+            write_json_string(s, out);
+            out.push(']');
+        }
+        Value::Binary(b) => {
+            out.push_str("[6,\"");
+            out.push_str(&BASE64.encode(b));
+            out.push_str("\"]");
+        }
+        Value::Array(items) => {
+            out.push_str("[7,[");
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                value_to_compact_json_str(item, out);
+            }
+            out.push_str("]]");
+        }
+        Value::Map(entries) => {
+            out.push_str("[8,[");
+            for (i, (key, val)) in entries.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_json_string(key, out);
+                out.push(',');
+                value_to_compact_json_str(val, out);
+            }
+            out.push_str("]]");
+        }
+    }
+}
+
+/// Write a JSON-escaped string (with surrounding quotes) to the output.
+/// Optimized for the common case of ASCII strings with no special characters.
+#[inline]
+fn write_json_string(s: &str, out: &mut String) {
+    out.push('"');
+    let bytes = s.as_bytes();
+    let mut start = 0;
+    for (i, &b) in bytes.iter().enumerate() {
+        let escape = match b {
+            b'"' => "\\\"",
+            b'\\' => "\\\\",
+            b'\n' => "\\n",
+            b'\r' => "\\r",
+            b'\t' => "\\t",
+            b if b < 0x20 => {
+                // Flush any buffered bytes
+                if start < i {
+                    out.push_str(&s[start..i]);
+                }
+                // Write \u00XX escape
+                static HEX: &[u8; 16] = b"0123456789abcdef";
+                let hi = HEX[(b >> 4) as usize] as char;
+                let lo = HEX[(b & 0xf) as usize] as char;
+                out.push_str("\\u00");
+                out.push(hi);
+                out.push(lo);
+                start = i + 1;
+                continue;
+            }
+            _ => {
+                continue;
+            }
+        };
+        // Flush any buffered bytes before the escape
+        if start < i {
+            out.push_str(&s[start..i]);
+        }
+        out.push_str(escape);
+        start = i + 1;
+    }
+    // Flush remaining
+    if start < bytes.len() {
+        out.push_str(&s[start..]);
+    }
+    out.push('"');
+}
+
+struct CompactValue(Value);
+
+impl<'de> Deserialize<'de> for CompactValue {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        deserializer
+            .deserialize_seq(CompactValueVisitor)
+            .map(CompactValue)
+    }
+}
+
+struct CompactValueVisitor;
+
+impl<'de> Visitor<'de> for CompactValueVisitor {
+    type Value = Value;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a compact value array [tag, value?]")
+    }
+
+    fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Value, A::Error> {
+        let tag: u64 = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::custom("compact value missing tag"))?;
+
+        match tag {
+            0 => {
+                // null — no content element
+                Ok(Value::Null)
+            }
+            1 => {
+                // bool
+                let v: bool = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::custom("compact bool missing value"))?;
+                Ok(Value::Bool(v))
+            }
+            2 => {
+                // i64 (as string)
+                let s: &str = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::custom("compact i64 missing value"))?;
+                let v: i64 = s
+                    .parse()
+                    .map_err(|_| de::Error::custom("compact i64 invalid"))?;
+                Ok(Value::I64(v))
+            }
+            3 => {
+                // u64 (as string)
+                let s: &str = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::custom("compact u64 missing value"))?;
+                let v: u64 = s
+                    .parse()
+                    .map_err(|_| de::Error::custom("compact u64 invalid"))?;
+                Ok(Value::U64(v))
+            }
+            4 => {
+                // f64
+                let v: f64 = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::custom("compact f64 missing value"))?;
+                Ok(Value::F64(v))
+            }
+            5 => {
+                // string
+                let v: String = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::custom("compact string missing value"))?;
+                Ok(Value::String(v))
+            }
+            6 => {
+                // binary (base64)
+                let encoded: &str = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::custom("compact binary missing value"))?;
+                let bytes = BASE64
+                    .decode(encoded)
+                    .map_err(|_| de::Error::custom("compact binary invalid base64"))?;
+                Ok(Value::Binary(bytes))
+            }
+            7 => {
+                // array of CompactValues
+                let items: Vec<CompactValue> = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::custom("compact array missing value"))?;
+                Ok(Value::Array(items.into_iter().map(|v| v.0).collect()))
+            }
+            8 => {
+                // map: flat array [key1, val1, key2, val2, ...]
+                // We deserialize this as a custom visitor that reads alternating string/CompactValue pairs
+                let entries: CompactMapEntries = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::custom("compact map missing value"))?;
+                Ok(Value::Map(entries.0))
+            }
+            _ => Err(de::Error::custom(format!("compact unknown tag: {tag}"))),
+        }
+    }
+}
+
+/// Deserializes a flat array [key1, val1, key2, val2, ...] into Vec<(String, Value)>
+struct CompactMapEntries(Vec<(String, Value)>);
+
+impl<'de> Deserialize<'de> for CompactMapEntries {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        deserializer.deserialize_seq(CompactMapEntriesVisitor)
+    }
+}
+
+struct CompactMapEntriesVisitor;
+
+impl<'de> Visitor<'de> for CompactMapEntriesVisitor {
+    type Value = CompactMapEntries;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a flat array of alternating key/value pairs")
+    }
+
+    fn visit_seq<A: de::SeqAccess<'de>>(
+        self,
+        mut seq: A,
+    ) -> std::result::Result<CompactMapEntries, A::Error> {
+        let mut entries = Vec::with_capacity(seq.size_hint().unwrap_or(0) / 2);
+        loop {
+            let key: Option<String> = seq.next_element()?;
+            let Some(key) = key else { break };
+            let val: CompactValue = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::custom("compact map missing value for key"))?;
+            entries.push((key, val.0));
+        }
+        Ok(CompactMapEntries(entries))
+    }
+}
+
+fn parse_compact_str(json: &mut [u8]) -> Result<Value> {
+    let compact: CompactValue = simd_json::from_slice(json)
+        .map_err(|e| BridgeError::new(format!("simd-json compact parse error: {e}")))?;
+    Ok(compact.0)
+}
+
+fn parse_compact_batch_str(json: &mut [u8]) -> Result<Vec<Value>> {
+    let items: Vec<CompactValue> = simd_json::from_slice(json)
+        .map_err(|e| BridgeError::new(format!("simd-json compact batch parse error: {e}")))?;
+    Ok(items.into_iter().map(|v| v.0).collect())
+}
+
+pub fn encode_compact_json(mut json: String) -> Result<Vec<u8>> {
+    let bytes = unsafe { json.as_bytes_mut() };
+    let value = parse_compact_str(bytes)?;
+    encode(&value).map_err(Into::into)
+}
+
+pub fn encode_batch_compact_json(mut json: String) -> Result<Vec<u8>> {
+    let bytes = unsafe { json.as_bytes_mut() };
+    let values = parse_compact_batch_str(bytes)?;
+    encode_batch(&values).map_err(Into::into)
+}
+
+impl BridgeSessionEncoder {
+    pub fn encode_compact_json(&mut self, mut json: String) -> Result<Vec<u8>> {
+        let bytes = unsafe { json.as_bytes_mut() };
+        let value = parse_compact_str(bytes)?;
+        self.inner.encode(&value).map_err(Into::into)
+    }
+
+    pub fn encode_batch_compact_json(&mut self, mut json: String) -> Result<Vec<u8>> {
+        let bytes = unsafe { json.as_bytes_mut() };
+        let values = parse_compact_batch_str(bytes)?;
+        self.inner.encode_batch(&values).map_err(Into::into)
+    }
+
+    pub fn encode_patch_compact_json(&mut self, mut json: String) -> Result<Vec<u8>> {
+        let bytes = unsafe { json.as_bytes_mut() };
+        let value = parse_compact_str(bytes)?;
+        self.inner.encode_patch(&value).map_err(Into::into)
+    }
+
+    pub fn encode_micro_batch_compact_json(&mut self, mut json: String) -> Result<Vec<u8>> {
+        let bytes = unsafe { json.as_bytes_mut() };
+        let values = parse_compact_batch_str(bytes)?;
+        self.inner.encode_micro_batch(&values).map_err(Into::into)
+    }
+}
+//
+// Deserializes the transport JSON format directly into gowe::Value,
+// skipping the TransportValue intermediate entirely. This avoids:
+// 1. Allocating TransportValue tree
+// 2. Walking the tree a second time in transport_to_value()
+// 3. String allocations for i64/u64 intermediates
+
+struct FastValueVisitor;
+
+impl<'de> Visitor<'de> for FastValueVisitor {
+    type Value = Value;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a transport value object with 't' and optional 'v' fields")
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> std::result::Result<Value, A::Error> {
+        let mut tag: Option<String> = None;
+        let mut content_value: Option<Box<RawValue>> = None;
+
+        while let Some(key) = map.next_key::<String>()? {
+            match key.as_str() {
+                "t" => {
+                    tag = Some(map.next_value()?);
+                }
+                "v" => {
+                    content_value = Some(map.next_value()?);
+                }
+                _ => {
+                    map.next_value::<serde::de::IgnoredAny>()?;
+                }
+            }
+        }
+
+        let tag = tag.ok_or_else(|| de::Error::missing_field("t"))?;
+
+        match tag.as_str() {
+            "null" => Ok(Value::Null),
+            "bool" => {
+                let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
+                let v: bool = serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                Ok(Value::Bool(v))
+            }
+            "i64" => {
+                let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
+                let s: &str = serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                let v: i64 = s.parse().map_err(|_| de::Error::custom("invalid i64"))?;
+                Ok(Value::I64(v))
+            }
+            "u64" => {
+                let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
+                let s: &str = serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                let v: u64 = s.parse().map_err(|_| de::Error::custom("invalid u64"))?;
+                Ok(Value::U64(v))
+            }
+            "f64" => {
+                let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
+                let v: f64 = serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                Ok(Value::F64(v))
+            }
+            "string" => {
+                let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
+                let v: String =
+                    serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                Ok(Value::String(v))
+            }
+            "binary" => {
+                let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
+                let encoded: String =
+                    serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                let bytes = BASE64
+                    .decode(&encoded)
+                    .map_err(|_| de::Error::custom("invalid base64"))?;
+                Ok(Value::Binary(bytes))
+            }
+            "array" => {
+                let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
+                let items: Vec<FastValue> =
+                    serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                Ok(Value::Array(items.into_iter().map(|v| v.0).collect()))
+            }
+            "map" => {
+                let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
+                let entries: Vec<(String, FastValue)> =
+                    serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                Ok(Value::Map(
+                    entries.into_iter().map(|(k, v)| (k, v.0)).collect(),
+                ))
+            }
+            other => Err(de::Error::unknown_variant(
+                other,
+                &[
+                    "null", "bool", "i64", "u64", "f64", "string", "binary", "array", "map",
+                ],
+            )),
+        }
+    }
+}
+
+/// A newtype wrapper around `Value` that implements `Deserialize` using the
+/// fast single-pass visitor that converts transport JSON directly to `Value`.
+struct FastValue(Value);
+
+impl<'de> Deserialize<'de> for FastValue {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        deserializer
+            .deserialize_map(FastValueVisitor)
+            .map(FastValue)
+    }
+}
+
+/// Parse a serde_json::Value transport representation directly into gowe::Value.
+fn parse_value_from_json_value(jv: serde_json::Value) -> Result<Value> {
+    let fast: FastValue = serde_json::from_value(jv)?;
+    Ok(fast.0)
+}
+
+/// Parse a serde_json::Value array of transport values.
+fn parse_values_from_json_value(jv: serde_json::Value) -> Result<Vec<Value>> {
+    let items: Vec<FastValue> = serde_json::from_value(jv)?;
+    Ok(items.into_iter().map(|v| v.0).collect())
 }
