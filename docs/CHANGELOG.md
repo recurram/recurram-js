@@ -29,5 +29,5 @@ Initial public release of the JavaScript and TypeScript bindings for Recurram.
 
 - Corrected the Rust crate path used by the workspace so native builds resolve the bridge crate correctly.
 
-[unreleased]: https://github.com/recurram-team/recurram-js/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/recurram-team/recurram-js/releases/tag/v0.1.0
+[unreleased]: https://github.com/recurram/recurram-js/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/recurram/recurram-js/releases/tag/v0.1.0

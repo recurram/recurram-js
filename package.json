@@ -6,11 +6,11 @@
   "packageManager": "pnpm@10.18.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/recurram-team/recurram-js.git"
+    "url": "git+https://github.com/recurram/recurram-js.git"
   },
-  "homepage": "https://github.com/recurram-team/recurram-js#readme",
+  "homepage": "https://github.com/recurram/recurram-js#readme",
   "bugs": {
-    "url": "https://github.com/recurram-team/recurram-js/issues"
+    "url": "https://github.com/recurram/recurram-js/issues"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
