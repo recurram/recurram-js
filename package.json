@@ -1,16 +1,16 @@
 {
-  "name": "@gowe/core",
+  "name": "@recurram/core",
   "version": "0.1.0",
   "description": "Node.js and TypeScript implementation of a fast, compact binary wire format for modern data transport.",
   "type": "module",
   "packageManager": "pnpm@10.18.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gowe-team/gowe-js.git"
+    "url": "git+https://github.com/recurram-team/recurram-js.git"
   },
-  "homepage": "https://github.com/gowe-team/gowe-js#readme",
+  "homepage": "https://github.com/recurram-team/recurram-js#readme",
   "bugs": {
-    "url": "https://github.com/gowe-team/gowe-js/issues"
+    "url": "https://github.com/recurram-team/recurram-js/issues"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -32,12 +32,12 @@
   "scripts": {
     "build": "pnpm build:napi && pnpm build:wasm && pnpm build:ts",
     "build:ts": "tsc -p tsconfig.json",
-    "build:napi": "cargo build --manifest-path Cargo.toml -p gowe-napi --release && node ./scripts/copy-napi.mjs",
-    "build:wasm": "wasm-pack build crates/gowe-wasm --target bundler --out-dir ../../wasm/pkg --out-name gowe_wasm --no-opt",
+    "build:napi": "cargo build --manifest-path Cargo.toml -p recurram-napi --release && node ./scripts/copy-napi.mjs",
+    "build:wasm": "wasm-pack build crates/recurram-wasm --target bundler --out-dir ../../wasm/pkg --out-name recurram_wasm --no-opt",
     "format": "prettier --write \"{README.md,package.json,tsconfig.json,.github/workflows/*.yml,scripts/**/*.mjs,src/**/*.ts,tests/**/*.mjs}\"",
     "format:check": "prettier --check \"{README.md,package.json,tsconfig.json,.github/workflows/*.yml,scripts/**/*.mjs,src/**/*.ts,tests/**/*.mjs}\"",
     "typecheck": "tsc --noEmit",
-    "test:rust": "cargo test --manifest-path Cargo.toml -p gowe-bridge",
+    "test:rust": "cargo test --manifest-path Cargo.toml -p recurram-bridge",
     "test:node": "pnpm build:napi && pnpm build:ts && node --test --test-concurrency=1 \"tests/**/*.test.mjs\"",
     "test": "pnpm test:rust && pnpm test:node",
     "prepack": "pnpm build",
@@ -45,7 +45,7 @@
     "clean": "rimraf dist native wasm target"
   },
   "keywords": [
-    "gowe",
+    "recurram",
     "rust",
     "napi",
     "wasm",

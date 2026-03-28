@@ -15,7 +15,7 @@ import {
 import type { TransportValue } from "./transport.js";
 import type {
   InitOptions,
-  GoweValue,
+  RecurramValue,
   Schema,
   SessionOptions,
 } from "./types.js";
@@ -23,7 +23,7 @@ import type { RuntimeKind, RuntimeSessionEncoder } from "./runtime/types.js";
 
 export type {
   InitOptions,
-  GoweValue,
+  RecurramValue,
   Schema,
   SchemaField,
   SessionOptions,
@@ -36,15 +36,15 @@ export async function init(options: InitOptions = {}): Promise<RuntimeKind> {
 
 // ── Transport JSON helpers (pre-serialized JSON string) ─────────────────────
 
-export function toTransportJson(value: GoweValue): string {
+export function toTransportJson(value: RecurramValue): string {
   return serializeValue(value);
 }
 
-export function fromTransportJson(valueJson: string): GoweValue {
+export function fromTransportJson(valueJson: string): RecurramValue {
   return deserializeValue(valueJson);
 }
 
-export function toTransportJsonBatch(values: GoweValue[]): string {
+export function toTransportJsonBatch(values: RecurramValue[]): string {
   return serializeValues(values);
 }
 
@@ -62,31 +62,34 @@ export function encodeBatchTransportJson(valuesJson: string): Uint8Array {
   return requireBackend().encodeBatchTransportJson(valuesJson);
 }
 
-// ── High-level API (GoweValue → compact JSON → encode) ──────────────────────
+// ── High-level API (RecurramValue → compact JSON → encode) ──────────────────────
 // Uses the compact transport format internally for best performance.
 
-export function encode(value: GoweValue): Uint8Array {
+export function encode(value: RecurramValue): Uint8Array {
   return requireBackend().encodeCompactJson(serializeCompact(value));
 }
 
-export function decode(bytes: Uint8Array): GoweValue {
+export function decode(bytes: Uint8Array): RecurramValue {
   return deserializeCompact(requireBackend().decodeToCompactJson(bytes));
 }
 
-export function encodeWithSchema(schema: Schema, value: GoweValue): Uint8Array {
+export function encodeWithSchema(
+  schema: Schema,
+  value: RecurramValue,
+): Uint8Array {
   return requireBackend().encodeWithSchemaTransportJson(
     serializeSchema(schema),
     serializeValue(value),
   );
 }
 
-export function encodeBatch(values: GoweValue[]): Uint8Array {
+export function encodeBatch(values: RecurramValue[]): Uint8Array {
   return requireBackend().encodeBatchCompactJson(serializeCompactBatch(values));
 }
 
 // ── Direct API (bypasses JSON.stringify, passes JS object to Rust serde) ────
 
-export function encodeDirect(value: GoweValue): Uint8Array {
+export function encodeDirect(value: RecurramValue): Uint8Array {
   return requireBackend().encodeDirect(
     toTransportValue(
       value,
@@ -94,12 +97,12 @@ export function encodeDirect(value: GoweValue): Uint8Array {
   );
 }
 
-export function decodeDirect(bytes: Uint8Array): GoweValue {
+export function decodeDirect(bytes: Uint8Array): RecurramValue {
   const transport = requireBackend().decodeDirect(bytes);
   return fromTransportValue(transport as unknown as TransportValue);
 }
 
-export function encodeBatchDirect(values: GoweValue[]): Uint8Array {
+export function encodeBatchDirect(values: RecurramValue[]): Uint8Array {
   return requireBackend().encodeBatchDirect(
     toTransportValues(
       values,
@@ -109,11 +112,11 @@ export function encodeBatchDirect(values: GoweValue[]): Uint8Array {
 
 // ── Compact JSON API (smaller transport format, ~50% less JSON) ─────────────
 
-export function toCompactJson(value: GoweValue): string {
+export function toCompactJson(value: RecurramValue): string {
   return serializeCompact(value);
 }
 
-export function toCompactJsonBatch(values: GoweValue[]): string {
+export function toCompactJsonBatch(values: RecurramValue[]): string {
   return serializeCompactBatch(values);
 }
 
@@ -129,11 +132,11 @@ export function encodeBatchCompactJson(json: string): Uint8Array {
   return requireBackend().encodeBatchCompactJson(json);
 }
 
-export function encodeCompact(value: GoweValue): Uint8Array {
+export function encodeCompact(value: RecurramValue): Uint8Array {
   return requireBackend().encodeCompactJson(serializeCompact(value));
 }
 
-export function encodeBatchCompact(values: GoweValue[]): Uint8Array {
+export function encodeBatchCompact(values: RecurramValue[]): Uint8Array {
   return requireBackend().encodeBatchCompactJson(serializeCompactBatch(values));
 }
 
@@ -155,8 +158,8 @@ export class SessionEncoder {
     this.#inner = inner;
   }
 
-  // High-level (GoweValue → compact JSON string → Rust)
-  encode(value: GoweValue): Uint8Array {
+  // High-level (RecurramValue → compact JSON string → Rust)
+  encode(value: RecurramValue): Uint8Array {
     return this.#inner.encodeCompactJson(serializeCompact(value));
   }
 
@@ -164,14 +167,14 @@ export class SessionEncoder {
     return this.#inner.encodeTransportJson(valueJson);
   }
 
-  encodeWithSchema(schema: Schema, value: GoweValue): Uint8Array {
+  encodeWithSchema(schema: Schema, value: RecurramValue): Uint8Array {
     return this.#inner.encodeWithSchemaTransportJson(
       serializeSchema(schema),
       serializeValue(value),
     );
   }
 
-  encodeBatch(values: GoweValue[]): Uint8Array {
+  encodeBatch(values: RecurramValue[]): Uint8Array {
     return this.#inner.encodeBatchCompactJson(serializeCompactBatch(values));
   }
 
@@ -179,7 +182,7 @@ export class SessionEncoder {
     return this.#inner.encodeBatchTransportJson(valuesJson);
   }
 
-  encodePatch(value: GoweValue): Uint8Array {
+  encodePatch(value: RecurramValue): Uint8Array {
     return this.#inner.encodePatchCompactJson(serializeCompact(value));
   }
 
@@ -187,7 +190,7 @@ export class SessionEncoder {
     return this.#inner.encodePatchTransportJson(valueJson);
   }
 
-  encodeMicroBatch(values: GoweValue[]): Uint8Array {
+  encodeMicroBatch(values: RecurramValue[]): Uint8Array {
     return this.#inner.encodeMicroBatchCompactJson(
       serializeCompactBatch(values),
     );
@@ -197,8 +200,8 @@ export class SessionEncoder {
     return this.#inner.encodeMicroBatchTransportJson(valuesJson);
   }
 
-  // Direct (GoweValue → TransportValue object → Rust serde, no JSON string)
-  encodeDirect(value: GoweValue): Uint8Array {
+  // Direct (RecurramValue → TransportValue object → Rust serde, no JSON string)
+  encodeDirect(value: RecurramValue): Uint8Array {
     return this.#inner.encodeDirect(
       toTransportValue(
         value,
@@ -206,7 +209,7 @@ export class SessionEncoder {
     );
   }
 
-  encodeBatchDirect(values: GoweValue[]): Uint8Array {
+  encodeBatchDirect(values: RecurramValue[]): Uint8Array {
     return this.#inner.encodeBatchDirect(
       toTransportValues(
         values,
@@ -214,7 +217,7 @@ export class SessionEncoder {
     );
   }
 
-  encodePatchDirect(value: GoweValue): Uint8Array {
+  encodePatchDirect(value: RecurramValue): Uint8Array {
     return this.#inner.encodePatchDirect(
       toTransportValue(
         value,
@@ -222,7 +225,7 @@ export class SessionEncoder {
     );
   }
 
-  encodeMicroBatchDirect(values: GoweValue[]): Uint8Array {
+  encodeMicroBatchDirect(values: RecurramValue[]): Uint8Array {
     return this.#inner.encodeMicroBatchDirect(
       toTransportValues(
         values,
@@ -230,8 +233,8 @@ export class SessionEncoder {
     );
   }
 
-  // Compact JSON (GoweValue → compact JSON string → Rust)
-  encodeCompact(value: GoweValue): Uint8Array {
+  // Compact JSON (RecurramValue → compact JSON string → Rust)
+  encodeCompact(value: RecurramValue): Uint8Array {
     return this.#inner.encodeCompactJson(serializeCompact(value));
   }
 
@@ -239,7 +242,7 @@ export class SessionEncoder {
     return this.#inner.encodeCompactJson(json);
   }
 
-  encodeBatchCompact(values: GoweValue[]): Uint8Array {
+  encodeBatchCompact(values: RecurramValue[]): Uint8Array {
     return this.#inner.encodeBatchCompactJson(serializeCompactBatch(values));
   }
 
@@ -247,7 +250,7 @@ export class SessionEncoder {
     return this.#inner.encodeBatchCompactJson(json);
   }
 
-  encodePatchCompact(value: GoweValue): Uint8Array {
+  encodePatchCompact(value: RecurramValue): Uint8Array {
     return this.#inner.encodePatchCompactJson(serializeCompact(value));
   }
 
@@ -255,7 +258,7 @@ export class SessionEncoder {
     return this.#inner.encodePatchCompactJson(json);
   }
 
-  encodeMicroBatchCompact(values: GoweValue[]): Uint8Array {
+  encodeMicroBatchCompact(values: RecurramValue[]): Uint8Array {
     return this.#inner.encodeMicroBatchCompactJson(
       serializeCompactBatch(values),
     );

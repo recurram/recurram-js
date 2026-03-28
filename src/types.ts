@@ -1,19 +1,19 @@
-export type GoweValue =
+export type RecurramValue =
   | null
   | boolean
   | number
   | bigint
   | string
   | Uint8Array
-  | GoweValue[]
-  | { [key: string]: GoweValue };
+  | RecurramValue[]
+  | { [key: string]: RecurramValue };
 
 export interface SchemaField {
   number: number | bigint;
   name: string;
   logicalType: string;
   required: boolean;
-  defaultValue?: GoweValue;
+  defaultValue?: RecurramValue;
   min?: number | bigint;
   max?: number | bigint;
   enumValues?: string[];

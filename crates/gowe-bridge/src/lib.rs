@@ -1,9 +1,9 @@
 use std::fmt;
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use gowe::model::SchemaField;
-use gowe::{
-    create_session_encoder, decode, encode, encode_batch, encode_with_schema, GoweError, Schema,
+use recurram::model::SchemaField;
+use recurram::{
+    create_session_encoder, decode, encode, encode_batch, encode_with_schema, RecurramError, Schema,
     SessionEncoder, SessionOptions, UnknownReferencePolicy, Value,
 };
 use serde::de::{self, MapAccess, Visitor};
@@ -51,8 +51,8 @@ impl From<serde_json::Error> for BridgeError {
     }
 }
 
-impl From<GoweError> for BridgeError {
-    fn from(value: GoweError) -> Self {
+impl From<RecurramError> for BridgeError {
+    fn from(value: RecurramError) -> Self {
         Self::new(value.to_string())
     }
 }
@@ -483,7 +483,7 @@ fn value_to_transport(value: Value) -> TransportValue {
 //
 // Uses a custom serde Deserialize impl for single-pass JSON → Value conversion.
 
-/// Serialize a gowe::Value to compact JSON format, writing directly to a String.
+/// Serialize a recurram::Value to compact JSON format, writing directly to a String.
 /// This avoids building any intermediate serde or transport objects.
 fn value_to_compact_json_str(value: &Value, out: &mut String) {
     match value {
@@ -777,7 +777,7 @@ impl BridgeSessionEncoder {
     }
 }
 //
-// Deserializes the transport JSON format directly into gowe::Value,
+// Deserializes the transport JSON format directly into recurram::Value,
 // skipping the TransportValue intermediate entirely. This avoids:
 // 1. Allocating TransportValue tree
 // 2. Walking the tree a second time in transport_to_value()
@@ -887,7 +887,7 @@ impl<'de> Deserialize<'de> for FastValue {
     }
 }
 
-/// Parse a serde_json::Value transport representation directly into gowe::Value.
+/// Parse a serde_json::Value transport representation directly into recurram::Value.
 fn parse_value_from_json_value(jv: serde_json::Value) -> Result<Value> {
     let fast: FastValue = serde_json::from_value(jv)?;
     Ok(fast.0)

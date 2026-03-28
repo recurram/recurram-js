@@ -1,4 +1,4 @@
-import type { GoweValue, Schema, SessionOptions } from "./types.js";
+import type { RecurramValue, Schema, SessionOptions } from "./types.js";
 
 export type TransportValue =
   | { t: "null" }
@@ -42,16 +42,16 @@ const MAX_U64 = (1n << 64n) - 1n;
 const MIN_I64 = -(1n << 63n);
 const MAX_I64 = (1n << 63n) - 1n;
 
-export function serializeValue(value: GoweValue): string {
+export function serializeValue(value: RecurramValue): string {
   return JSON.stringify(toTransportValue(value));
 }
 
-export function deserializeValue(json: string): GoweValue {
+export function deserializeValue(json: string): RecurramValue {
   const parsed = JSON.parse(json) as TransportValue;
   return fromTransportValue(parsed);
 }
 
-export function serializeValues(values: GoweValue[]): string {
+export function serializeValues(values: RecurramValue[]): string {
   const out = new Array<TransportValue>(values.length);
   for (let index = 0; index < values.length; index += 1) {
     out[index] = toTransportValue(values[index]);
@@ -118,7 +118,7 @@ export function serializeSessionOptions(options: SessionOptions = {}): string {
   return JSON.stringify(payload);
 }
 
-export function toTransportValue(value: GoweValue): TransportValue {
+export function toTransportValue(value: RecurramValue): TransportValue {
   if (value === null) {
     return { t: "null" };
   }
@@ -178,14 +178,14 @@ export function toTransportValue(value: GoweValue): TransportValue {
   }
 
   const entries: Array<[string, TransportValue]> = [];
-  const objectValue = value as Record<string, GoweValue>;
+  const objectValue = value as Record<string, RecurramValue>;
   for (const key in objectValue) {
     entries.push([key, toTransportValue(objectValue[key])]);
   }
   return { t: "map", v: entries };
 }
 
-export function toTransportValues(values: GoweValue[]): TransportValue[] {
+export function toTransportValues(values: RecurramValue[]): TransportValue[] {
   const out = new Array<TransportValue>(values.length);
   for (let index = 0; index < values.length; index += 1) {
     out[index] = toTransportValue(values[index]);
@@ -193,7 +193,7 @@ export function toTransportValues(values: GoweValue[]): TransportValue[] {
   return out;
 }
 
-export function fromTransportValue(value: TransportValue): GoweValue {
+export function fromTransportValue(value: TransportValue): RecurramValue {
   switch (value.t) {
     case "null":
       return null;
@@ -211,14 +211,14 @@ export function fromTransportValue(value: TransportValue): GoweValue {
       return fromBase64(value.v);
     case "array": {
       const length = value.v.length;
-      const out = new Array<GoweValue>(length);
+      const out = new Array<RecurramValue>(length);
       for (let index = 0; index < length; index += 1) {
         out[index] = fromTransportValue(value.v[index]);
       }
       return out;
     }
     case "map": {
-      const out: Record<string, GoweValue> = {};
+      const out: Record<string, RecurramValue> = {};
       const length = value.v.length;
       for (let index = 0; index < length; index += 1) {
         const entry = value.v[index];
@@ -299,16 +299,16 @@ function fromBase64(encoded: string): Uint8Array {
 
 type CompactValue = readonly [number] | readonly [number, unknown];
 
-export function serializeCompact(value: GoweValue): string {
+export function serializeCompact(value: RecurramValue): string {
   return JSON.stringify(toCompactValue(value));
 }
 
-export function deserializeCompact(json: string): GoweValue {
+export function deserializeCompact(json: string): RecurramValue {
   const parsed = JSON.parse(json) as CompactValue;
   return fromCompactValue(parsed);
 }
 
-export function serializeCompactBatch(values: GoweValue[]): string {
+export function serializeCompactBatch(values: RecurramValue[]): string {
   const out = new Array(values.length);
   for (let index = 0; index < values.length; index += 1) {
     out[index] = toCompactValue(values[index]);
@@ -316,7 +316,7 @@ export function serializeCompactBatch(values: GoweValue[]): string {
   return JSON.stringify(out);
 }
 
-function toCompactValue(value: GoweValue): CompactValue {
+function toCompactValue(value: RecurramValue): CompactValue {
   if (value === null) {
     return [0];
   }
@@ -374,7 +374,7 @@ function toCompactValue(value: GoweValue): CompactValue {
   }
 
   // Map: flat array [key1, val1, key2, val2, ...]
-  const objectValue = value as Record<string, GoweValue>;
+  const objectValue = value as Record<string, RecurramValue>;
   const keys = Object.keys(objectValue);
   const flat = new Array(keys.length * 2);
   for (let index = 0; index < keys.length; index += 1) {
@@ -384,7 +384,7 @@ function toCompactValue(value: GoweValue): CompactValue {
   return [8, flat];
 }
 
-function fromCompactValue(cv: CompactValue): GoweValue {
+function fromCompactValue(cv: CompactValue): RecurramValue {
   const tag = cv[0] as number;
   switch (tag) {
     case 0: // null
@@ -405,7 +405,7 @@ function fromCompactValue(cv: CompactValue): GoweValue {
       // array
       const items = (cv as readonly [number, CompactValue[]])[1];
       const length = items.length;
-      const out = new Array<GoweValue>(length);
+      const out = new Array<RecurramValue>(length);
       for (let index = 0; index < length; index += 1) {
         out[index] = fromCompactValue(items[index]);
       }
@@ -414,7 +414,7 @@ function fromCompactValue(cv: CompactValue): GoweValue {
     case 8: {
       // map: flat array [key1, val1, key2, val2, ...]
       const flat = (cv as readonly [number, unknown[]])[1];
-      const out: Record<string, GoweValue> = {};
+      const out: Record<string, RecurramValue> = {};
       const length = flat.length;
       for (let index = 0; index < length; index += 2) {
         out[flat[index] as string] = fromCompactValue(

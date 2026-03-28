@@ -1,4 +1,4 @@
-use gowe_bridge::{
+use recurram_bridge::{
     decode_to_transport_json, encode_batch_transport_json, encode_transport_json,
     encode_with_schema_transport_json, BridgeSessionEncoder,
 };

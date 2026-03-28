@@ -1,5 +1,5 @@
 [package]
-name = "gowe-napi"
+name = "recurram-napi"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-gowe-bridge = { path = "../gowe-bridge" }
+recurram-bridge = { path = "../recurram-bridge" }
 napi = { version = "2.16", default-features = false, features = ["napi8", "serde-json"] }
 napi-derive = "2.16"
 serde_json = "1.0"

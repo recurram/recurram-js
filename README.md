@@ -1,9 +1,9 @@
-# Gowe (JS)
+# Recurram (JS)
 
-JavaScript/TypeScript bindings for `gowe-rust` with two backends:
+JavaScript/TypeScript bindings for `recurram-rust` with two backends:
 
-- Node.js: N-API (`gowe-napi`)
-- Browser/JS runtime: WebAssembly (`gowe-wasm`)
+- Node.js: N-API (`recurram-napi`)
+- Browser/JS runtime: WebAssembly (`recurram-wasm`)
 
 Integers decode as `bigint` by default (i64/u64 safe handling).
 
@@ -22,7 +22,7 @@ pnpm build
 
 Build steps:
 
-1. Build N-API addon (`native/gowe_napi.node`)
+1. Build N-API addon (`native/recurram_napi.node`)
 2. Build WASM package (`wasm/pkg/*`)
 3. Build TypeScript output (`dist/*`)
 
@@ -55,12 +55,12 @@ import {
   createSessionEncoder,
   toTransportJson,
   encodeTransportJson,
-  type GoweValue,
-} from "@gowe/core";
+  type RecurramValue,
+} from "@recurram/core";
 
 await init({ prefer: "napi" });
 
-const value: GoweValue = {
+const value: RecurramValue = {
   id: 1001n,
   name: "alice",
   active: true,
@@ -96,7 +96,7 @@ For hot paths where you can prepare payloads ahead of time, use transport JSON A
 ## Usage (Browser)
 
 ```ts
-import { init, encode, decode } from "@gowe/core";
+import { init, encode, decode } from "@recurram/core";
 
 await init({ prefer: "wasm" });
 
@@ -107,29 +107,29 @@ const value = decode(bytes);
 If you want to pass a custom WASM source, use `wasmInput`:
 
 ```ts
-await init({ prefer: "wasm", wasmInput: "/assets/gowe_wasm_bg.wasm" });
+await init({ prefer: "wasm", wasmInput: "/assets/recurram_wasm_bg.wasm" });
 ```
 
 ## TypeScript types
 
 Main exported types:
 
-- `GoweValue`
+- `RecurramValue`
 - `Schema`, `SchemaField`
 - `SessionOptions`
 
-`GoweValue` includes `bigint` and `Uint8Array` support:
+`RecurramValue` includes `bigint` and `Uint8Array` support:
 
 ```ts
-type GoweValue =
+type RecurramValue =
   | null
   | boolean
   | number
   | bigint
   | string
   | Uint8Array
-  | GoweValue[]
-  | { [key: string]: GoweValue };
+  | RecurramValue[]
+  | { [key: string]: RecurramValue };
 ```
 
 ## Publish to npm

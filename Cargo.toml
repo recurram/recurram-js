@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/gowe-bridge", "crates/gowe-napi", "crates/gowe-wasm"]
+members = ["crates/recurram-bridge", "crates/recurram-napi", "crates/recurram-wasm"]
 resolver = "2"
 
 [profile.release]

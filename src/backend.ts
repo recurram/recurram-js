@@ -23,7 +23,7 @@ export async function initBackend(
 export function requireBackend(): RuntimeBackend {
   if (!backend) {
     throw new Error(
-      "gowe is not initialized. Call await init() before encode/decode.",
+      "recurram is not initialized. Call await init() before encode/decode.",
     );
   }
   return backend;

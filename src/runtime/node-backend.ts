@@ -47,7 +47,7 @@ interface NativeModule {
 export function loadNodeBackend(): RuntimeBackend {
   const require = createRequire(import.meta.url);
   const modulePath = fileURLToPath(
-    new URL("../../native/gowe_napi.node", import.meta.url),
+    new URL("../../native/recurram_napi.node", import.meta.url),
   );
   const native = require(modulePath) as NativeModule;
   return {
