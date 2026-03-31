@@ -3,8 +3,8 @@ use std::fmt;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use recurram::model::SchemaField;
 use recurram::{
-    create_session_encoder, decode, encode, encode_batch, encode_with_schema, RecurramError, Schema,
-    SessionEncoder, SessionOptions, UnknownReferencePolicy, Value,
+    create_session_encoder, decode, encode, encode_batch, encode_with_schema, RecurramError,
+    Schema, SessionEncoder, SessionOptions, UnknownReferencePolicy, Value,
 };
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -180,7 +180,7 @@ pub fn encode_with_schema_transport_json(
     mut schema_json: String,
     mut value_json: String,
 ) -> Result<Vec<u8>> {
-    let schema = parse_schema_json(&mut schema_json)?;
+    let schema = parse_schema_json(schema_json.as_mut_str())?;
     let vbytes = unsafe { value_json.as_bytes_mut() };
     let transport: TransportValue = simd_from_mut_slice(vbytes)?;
     let value = transport_to_value(transport)?;
@@ -221,7 +221,7 @@ impl BridgeSessionEncoder {
         mut schema_json: String,
         mut value_json: String,
     ) -> Result<Vec<u8>> {
-        let schema = parse_schema_json(&mut schema_json)?;
+        let schema = parse_schema_json(schema_json.as_mut_str())?;
         let vbytes = unsafe { value_json.as_bytes_mut() };
         let transport: TransportValue = simd_from_mut_slice(vbytes)?;
         let value = transport_to_value(transport)?;
@@ -265,7 +265,7 @@ impl BridgeSessionEncoder {
     }
 }
 
-fn parse_schema_json(schema_json: &mut String) -> Result<Schema> {
+fn parse_schema_json(schema_json: &mut str) -> Result<Schema> {
     let bytes = unsafe { schema_json.as_bytes_mut() };
     let schema: TransportSchema = simd_from_mut_slice(bytes)?;
     transport_schema_to_schema(schema)
@@ -816,36 +816,34 @@ impl<'de> Visitor<'de> for FastValueVisitor {
             "null" => Ok(Value::Null),
             "bool" => {
                 let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
-                let v: bool = serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                let v: bool = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
                 Ok(Value::Bool(v))
             }
             "i64" => {
                 let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
-                let s: &str = serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                let s: &str = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
                 let v: i64 = s.parse().map_err(|_| de::Error::custom("invalid i64"))?;
                 Ok(Value::I64(v))
             }
             "u64" => {
                 let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
-                let s: &str = serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                let s: &str = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
                 let v: u64 = s.parse().map_err(|_| de::Error::custom("invalid u64"))?;
                 Ok(Value::U64(v))
             }
             "f64" => {
                 let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
-                let v: f64 = serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                let v: f64 = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
                 Ok(Value::F64(v))
             }
             "string" => {
                 let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
-                let v: String =
-                    serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                let v: String = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
                 Ok(Value::String(v))
             }
             "binary" => {
                 let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
-                let encoded: String =
-                    serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                let encoded: String = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
                 let bytes = BASE64
                     .decode(&encoded)
                     .map_err(|_| de::Error::custom("invalid base64"))?;
@@ -854,13 +852,13 @@ impl<'de> Visitor<'de> for FastValueVisitor {
             "array" => {
                 let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
                 let items: Vec<FastValue> =
-                    serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                    serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
                 Ok(Value::Array(items.into_iter().map(|v| v.0).collect()))
             }
             "map" => {
                 let raw = content_value.ok_or_else(|| de::Error::missing_field("v"))?;
                 let entries: Vec<(String, FastValue)> =
-                    serde_json::from_str(raw.get()).map_err(|e| de::Error::custom(e))?;
+                    serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
                 Ok(Value::Map(
                     entries.into_iter().map(|(k, v)| (k, v.0)).collect(),
                 ))

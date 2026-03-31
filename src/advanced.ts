@@ -1,4 +1,5 @@
 import { initBackend, requireBackend } from "./backend.js";
+import { encodeFast, tryDecodeFast } from "./fast-codec.js";
 import {
   deserializeCompact,
   deserializeValue,
@@ -30,20 +31,55 @@ export type {
   UnknownReferencePolicy,
 } from "./types.js";
 
+type EncodeImpl = (value: RecurramValue) => Uint8Array;
+type DecodeImpl = (bytes: Uint8Array) => RecurramValue;
+type EncodeBatchImpl = (values: RecurramValue[]) => Uint8Array;
+
+let encodeImpl: EncodeImpl | null = null;
+let decodeImpl: DecodeImpl | null = null;
+let encodeBatchImpl: EncodeBatchImpl | null = null;
+
 export async function init(options: InitOptions = {}): Promise<RuntimeKind> {
-  return initBackend(options);
+  const kind = await initBackend(options);
+  encodeImpl = null;
+  decodeImpl = null;
+  encodeBatchImpl = null;
+  return kind;
 }
 
 export function encode(value: RecurramValue): Uint8Array {
-  return requireBackend().encodeCompactJson(serializeCompact(value));
+  if (!encodeImpl) {
+    requireBackend();
+    encodeImpl = (input) => encodeFast(input);
+  }
+  return encodeImpl(value);
 }
 
 export function encodeBatch(values: RecurramValue[]): Uint8Array {
-  return requireBackend().encodeBatchCompactJson(serializeCompactBatch(values));
+  if (!encodeBatchImpl) {
+    const backend = requireBackend();
+    encodeBatchImpl = (input) =>
+      backend.encodeBatchCompactJson(serializeCompactBatch(input));
+  }
+  return encodeBatchImpl(values);
 }
 
 export function decode(bytes: Uint8Array): RecurramValue {
-  return deserializeCompact(requireBackend().decodeToCompactJson(bytes));
+  if (!decodeImpl) {
+    const backend = requireBackend();
+    if (backend.decodeNative) {
+      decodeImpl = (input) => backend.decodeNative!(input) as RecurramValue;
+    } else {
+      decodeImpl = (input) => {
+        const decoded = tryDecodeFast(input);
+        if (decoded !== undefined) {
+          return decoded;
+        }
+        return deserializeCompact(backend.decodeToCompactJson(input));
+      };
+    }
+  }
+  return decodeImpl(bytes);
 }
 
 export function toTransportJson(value: RecurramValue): string {

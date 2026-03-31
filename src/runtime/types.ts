@@ -27,6 +27,8 @@ export interface RuntimeSessionEncoder {
 
 export interface RuntimeBackend {
   kind: RuntimeKind;
+  encodeNative?: (value: unknown) => Uint8Array;
+  decodeNative?: (bytes: Uint8Array) => unknown;
   encodeTransportJson(valueJson: string): Uint8Array;
   decodeToTransportJson(bytes: Uint8Array): string;
   decodeToCompactJson(bytes: Uint8Array): string;

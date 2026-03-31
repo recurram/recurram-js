@@ -5,6 +5,7 @@ import { createSessionEncoder, decode, encode, init } from "../dist/index.js";
 import {
   createSessionEncoder as createAdvancedSessionEncoder,
   encodeBatch,
+  encodeTransportJson,
   encodeWithSchema,
 } from "../dist/advanced.js";
 
@@ -31,8 +32,38 @@ test("encodes and decodes with bigint and binary", async () => {
   assert.equal(decoded.id, 123n);
   assert.equal(decoded.name, "alice");
   assert.equal(decoded.active, true);
+  assert.ok(decoded.blob instanceof Uint8Array);
   assert.deepEqual(Array.from(decoded.blob), [1, 2, 3, 4]);
   assert.deepEqual(decoded.scores, [1n, 2n, 3n]);
+});
+
+test("decodes from Buffer input", async () => {
+  const bytes = encode({ id: 42n, name: "buffer" });
+  const decoded = decode(Buffer.from(bytes));
+  assert.equal(decoded.id, 42n);
+  assert.equal(decoded.name, "buffer");
+});
+
+test("decodes u64 values above i64 range", async () => {
+  const id = 9_223_372_036_854_775_808n;
+  const decoded = decode(encode({ id }));
+  assert.equal(decoded.id, id);
+});
+
+test("falls back when native fast decode sees string references", async () => {
+  const bytes = encodeTransportJson(
+    '{"t":"map","v":[["a",{"t":"string","v":"x"}],["b",{"t":"string","v":"x"}]]}',
+  );
+  const decoded = decode(bytes);
+  assert.deepEqual(decoded, { a: "x", b: "x" });
+});
+
+test("rejects unsupported root values on the native fast path", async () => {
+  assert.throws(() => encode(new Date()), /unsupported value type/);
+  assert.throws(
+    () => encode(Number.MAX_SAFE_INTEGER + 1),
+    /unsafe integer number detected/,
+  );
 });
 
 test("supports schema and batch APIs through the advanced entrypoint", async () => {

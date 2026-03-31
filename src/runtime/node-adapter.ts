@@ -25,6 +25,8 @@ export interface NativeSessionEncoder {
 }
 
 export interface NativeModule {
+  encodeNative(value: unknown): Uint8Array;
+  decodeNative(bytes: Uint8Array): unknown;
   encodeTransportJson(valueJson: string): Uint8Array;
   decodeToTransportJson(bytes: Uint8Array): string;
   decodeToCompactJson(bytes: Uint8Array): string;
@@ -44,6 +46,8 @@ export interface NativeModule {
 export function createNodeRuntimeBackend(native: NativeModule): RuntimeBackend {
   return {
     kind: "napi",
+    encodeNative: (value) => asUint8Array(native.encodeNative(value)),
+    decodeNative: (bytes) => native.decodeNative(bytes),
     encodeTransportJson: (valueJson) =>
       asUint8Array(native.encodeTransportJson(valueJson)),
     decodeToTransportJson: (bytes) => native.decodeToTransportJson(bytes),
