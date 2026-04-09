@@ -1,0 +1,78 @@
+name: PR Message Check
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  validate-pr-body:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Validate PR body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body ?? '';
+
+            const errors = [];
+
+            // Required sections
+            const requiredSections = [
+              '## Summary',
+              '## Related Issue',
+              '## Type of Change',
+              '## Testing',
+              '## Checklist',
+            ];
+            for (const section of requiredSections) {
+              if (!body.includes(section)) {
+                errors.push(`Missing required section: \`${section}\``);
+              }
+            }
+
+            // Summary must have content beyond the comment placeholder
+            const summaryMatch = body.match(/## Summary\s*\n([\s\S]*?)(?=\n## |\s*$)/);
+            if (summaryMatch) {
+              const summaryContent = summaryMatch[1].replace(/<!--[\s\S]*?-->/g, '').trim();
+              if (!summaryContent) {
+                errors.push('`## Summary` section must not be empty.');
+              }
+            }
+
+            // Testing must have content beyond the comment placeholder
+            const testingMatch = body.match(/## Testing\s*\n([\s\S]*?)(?=\n## |\s*$)/);
+            if (testingMatch) {
+              const testingContent = testingMatch[1].replace(/<!--[\s\S]*?-->/g, '').trim();
+              if (!testingContent) {
+                errors.push('`## Testing` section must not be empty.');
+              }
+            }
+
+            // At least one Type of Change checkbox must be checked
+            const typeSection = body.match(/## Type of Change\s*\n([\s\S]*?)(?=\n## )/);
+            if (typeSection) {
+              const checked = (typeSection[1].match(/- \[x\]/gi) ?? []).length;
+              if (checked === 0) {
+                errors.push('`## Type of Change`: at least one checkbox must be checked (`[x]`).');
+              }
+            }
+
+            // All Checklist items must be checked
+            const checklistSection = body.match(/## Checklist\s*\n([\s\S]*?)(?=\n## |\s*$)/);
+            if (checklistSection) {
+              const total = (checklistSection[1].match(/- \[[ x]\]/gi) ?? []).length;
+              const checked = (checklistSection[1].match(/- \[x\]/gi) ?? []).length;
+              if (total > 0 && checked < total) {
+                errors.push(`\`## Checklist\`: all items must be checked (${checked}/${total} checked).`);
+              }
+            }
+
+            if (errors.length > 0) {
+              core.setFailed(
+                'PR body validation failed:\n\n' +
+                errors.map(e => `- ${e}`).join('\n')
+              );
+            }
