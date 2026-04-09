@@ -95,8 +95,9 @@ function tryLoadDefaultBackendSync(): RuntimeBackend | null {
   }
 
   const require = moduleApi.createRequire(import.meta.url);
+  const platformKey = `${process.platform}-${process.arch}`;
   const modulePath = urlApi.fileURLToPath(
-    new URL("../native/recurram_napi.node", import.meta.url),
+    new URL(`../native/recurram_napi-${platformKey}.node`, import.meta.url),
   );
   const native = require(modulePath) as NativeModule;
   return createNodeRuntimeBackend(native);

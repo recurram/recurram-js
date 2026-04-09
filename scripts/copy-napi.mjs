@@ -6,7 +6,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 const targetDir = path.join(root, "native");
-const targetFile = path.join(targetDir, "recurram_napi.node");
+const platformKey = `${process.platform}-${process.arch}`;
+const targetFile = path.join(targetDir, `recurram_napi-${platformKey}.node`);
 
 const sourceFile = resolveSourceBinary(path.join(root, "target", "release"));
 
