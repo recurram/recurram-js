@@ -33,7 +33,11 @@ export async function loadWasmBackend(
 ): Promise<RuntimeBackend> {
   const moduleUrl = new URL("../../wasm/pkg/recurram_wasm.js", import.meta.url);
   const wasm = (await import(moduleUrl.href)) as WasmModule;
-  await wasm.default(wasmInput);
+  // bundler target auto-initializes via static WASM import; web/deno targets
+  // expose an explicit async default init function that must be called.
+  if (typeof wasm.default === "function") {
+    await wasm.default(wasmInput);
+  }
   return {
     kind: "wasm",
     encodeTransportJson: (valueJson) => wasm.encodeTransportJson(valueJson),
